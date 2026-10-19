@@ -5,7 +5,7 @@
 // ==================== 常量配置 ====================
 const GITHUB_API = 'https://api.github.com';
 const REPO_OWNER = '7310c7310c';
-const REPO_NAME = '7310c7310c.github.io';
+const REPO_NAME = 'vita-plan';
 const BRANCH = 'main';
 
 const ALLOWED_IMG_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/bmp'];
