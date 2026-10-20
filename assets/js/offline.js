@@ -943,6 +943,11 @@
             btn.disabled = true;
             return;
         }
+        if (checking) {
+            // 自動檢查沒有 busy overlay，仍需保持手動按鈕不可點
+            btn.disabled = true;
+            return;
+        }
 
         if (swFailure) {
             showOfflineUnavailable(swFailure);
@@ -1479,10 +1484,11 @@
         return next;
     }
 
-    async function checkForUpdates() {
+    async function checkForUpdates(options) {
+        const silent = !!(options && options.silent);
         if (busy || checking) return;
         if (!locksSupported) {
-            showError(new Error(tr('locksUnsupported')));
+            if (!silent) showError(new Error(tr('locksUnsupported')));
             return;
         }
         checking = true;
@@ -1492,7 +1498,7 @@
 
         try {
             if (!navigator.onLine) {
-                showError(new Error(tr('offlineError')));
+                if (!silent) showError(new Error(tr('offlineError')));
                 return;
             }
             await ensureServiceWorker();
@@ -1508,6 +1514,10 @@
                     return current;
                 });
             } catch (e) {
+                if (silent) {
+                    console.debug('auto update check: state unavailable', e);
+                    return;
+                }
                 stateLoadFailed = true;
                 showError(new Error(tr('stateError')));
                 return;
@@ -1517,23 +1527,28 @@
             if (latest.manifestVersion) setImageVersion(latest.manifestVersion);
 
             if (!(await checkComplete(latest))) {
-                refreshUI();
+                if (!silent) refreshUI();
                 return;
             }
 
-            setBusy(true);
-            showOverlay(tr('checkTitle'), tr('checkMsg'), { progress: true });
+            if (!silent) {
+                setBusy(true);
+                showOverlay(tr('checkTitle'), tr('checkMsg'), { progress: true });
+            }
 
             const manifest = await fetchManifest();
             const diff = diffManifest(latest.files, manifest);
             if (!diff.changed.length && !diff.removed.length) {
-                setBusy(false);
-                hideOverlay();
-                toast(tr('upToDate'));
-                refreshUI();
+                if (!silent) {
+                    setBusy(false);
+                    hideOverlay();
+                    toast(tr('upToDate'));
+                }
                 return;
             }
 
+            // 自動模式到發現更新才鎖頁面；手動模式原本的檢查 overlay 直接換成確認框
+            setBusy(true);
             showOverlay(
                 tr('confirmTitle'),
                 tr('confirmMsg'),
@@ -1550,12 +1565,24 @@
                 }
             );
         } catch (error) {
-            showError(error);
-            refreshUI();
+            if (silent) {
+                console.debug('auto update check failed', error);
+            } else {
+                showError(error);
+                refreshUI();
+            }
         } finally {
             checking = false;
             if (!busy) refreshUI();
         }
+    }
+
+    function scheduleAutoUpdateCheck() {
+        if (!state || !state.complete || !navigator.onLine) return;
+        setTimeout(function () {
+            if (!state || !state.complete || !navigator.onLine) return;
+            checkForUpdates({ silent: true });
+        }, 300);
     }
 
     async function applyUpdate(confirmedManifest, checkedRevision) {
@@ -2045,6 +2072,7 @@
         initialized = true;
         await refreshUI();
         maybeCompactCaches();
+        scheduleAutoUpdateCheck();
     }
 
     if (document.readyState === 'loading') {
