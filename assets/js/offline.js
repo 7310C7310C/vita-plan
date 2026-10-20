@@ -100,6 +100,7 @@
             retry: '重试',
             close: '关闭',
             offlineError: '目前离线，请联网后再试。',
+            networkError: '无法连接网络，请检查网络后重试。',
             storageError: '存储空间不足，无法完成下载。',
             downloadFailed: '部分文件下载失败，已下载的部分会保留，可重试续传。',
             updateFailed: '部分文件更新失败，旧版本仍可继续使用。',
@@ -155,6 +156,7 @@
             retry: 'Retry',
             close: 'Close',
             offlineError: 'You are offline. Please reconnect and try again.',
+            networkError: 'Could not connect to the network. Please check your connection and try again.',
             storageError: 'Not enough storage to finish the download.',
             downloadFailed: 'Some files failed to download. Downloaded files are kept for resume.',
             updateFailed: 'Some files failed to update. The previous version is still available.',
@@ -1285,10 +1287,6 @@
             return;
         }
         lastAction = 'download';
-        if (!navigator.onLine) {
-            showError(new Error(tr('offlineError')));
-            return;
-        }
 
         setBusy(true);
         showOverlay(tr('downloadTitle'), tr('downloadMsg'), { progress: true });
@@ -1484,6 +1482,13 @@
         return next;
     }
 
+    function isNetworkError(error) {
+        if (!error) return false;
+        const message = String(error.message || '');
+        return error.name === 'TypeError'
+            || /Failed to fetch|NetworkError|Load failed|network error/i.test(message);
+    }
+
     async function checkForUpdates(options) {
         const silent = !!(options && options.silent);
         if (busy || checking) return;
@@ -1497,10 +1502,6 @@
         if (btn) btn.disabled = true;
 
         try {
-            if (!navigator.onLine) {
-                if (!silent) showError(new Error(tr('offlineError')));
-                return;
-            }
             await ensureServiceWorker();
 
             let latest;
@@ -1568,7 +1569,7 @@
             if (silent) {
                 console.debug('auto update check failed', error);
             } else {
-                showError(error);
+                showError(isNetworkError(error) ? new Error(tr('networkError')) : error);
                 refreshUI();
             }
         } finally {
@@ -1578,9 +1579,9 @@
     }
 
     function scheduleAutoUpdateCheck() {
-        if (!state || !state.complete || !navigator.onLine) return;
+        if (!state || !state.complete) return;
         setTimeout(function () {
-            if (!state || !state.complete || !navigator.onLine) return;
+            if (!state || !state.complete) return;
             checkForUpdates({ silent: true });
         }, 300);
     }
