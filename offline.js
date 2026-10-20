@@ -55,10 +55,10 @@
             notDownloaded: '未下载',
             incomplete: '缓存不完整',
             working: '处理中……',
-            downloadAll: '下载全部（约 36MB）',
+            downloadAll: '缓存全部（约 36MB）',
             continue: '继续下载',
             checkUpdate: '检查更新',
-            cachedStatus: '更新于 {date}',
+            cachedStatus: '缓存于 {date}',
             reading: '正在读取离线状态……',
             unavailableButton: '离线缓存不可用',
             swUnsupported: '此浏览器不支持离线缓存。',
@@ -73,9 +73,8 @@
             contentMismatch: '文件内容与离线清单不一致，已停止操作。',
             integrityUnsupported: '此浏览器不支持完整性校验。',
             incompleteManifest: '缓存不完整，请重试。',
-            storageInsufficient: '可用存储空间不足，无法完成离线缓存。',
             downloadTitle: '正在下载乐谱',
-            downloadMsg: '首次下载全部乐谱，完成后可离线打开。请保持页面打开。',
+            downloadMsg: '首次缓存全部乐谱，完成后可离线打开。请保持页面打开。',
             checkTitle: '正在检查更新',
             checkMsg: '正在比对页面与乐谱文件，请稍候。',
             updateTitle: '正在更新乐谱',
@@ -108,10 +107,10 @@
             notDownloaded: 'Not downloaded',
             incomplete: 'Cache incomplete',
             working: 'Working...',
-            downloadAll: 'Download all (about 36MB)',
+            downloadAll: 'Cache all (about 36MB)',
             continue: 'Continue download',
             checkUpdate: 'Check for updates',
-            cachedStatus: 'Updated {date}',
+            cachedStatus: 'Cached {date}',
             reading: 'Reading offline status...',
             unavailableButton: 'Offline cache unavailable',
             swUnsupported: 'This browser does not support offline caching.',
@@ -126,9 +125,8 @@
             contentMismatch: 'A downloaded file did not match the offline manifest. The operation was stopped.',
             integrityUnsupported: 'This browser does not support integrity verification.',
             incompleteManifest: 'The cache is incomplete. Please retry.',
-            storageInsufficient: 'There is not enough storage to finish the offline cache.',
             downloadTitle: 'Downloading sheet music',
-            downloadMsg: 'Download all sheet music once, then open them offline. Keep this page open.',
+            downloadMsg: 'Cache all sheet music once, then open them offline. Keep this page open.',
             checkTitle: 'Checking for updates',
             checkMsg: 'Comparing local files with the server. Please wait.',
             updateTitle: 'Updating sheet music',
@@ -470,20 +468,27 @@
     }
 
     async function preflightStorage(bytes) {
+        // 只做提示，不阻止下載：部分瀏覽器（例如部分 Android 內建瀏覽器）
+        // 的 storage.estimate() 會回報不準確的 quota/usage，若據此阻擋會誤判。
+        // 真正的配額錯誤由 cache.put() 的 QuotaExceededError 處理。
         if (!bytes || bytes <= 0) return;
         if (!navigator.storage || typeof navigator.storage.estimate !== 'function') return;
         try {
             const estimate = await navigator.storage.estimate();
             if (!estimate || typeof estimate.quota !== 'number' || typeof estimate.usage !== 'number') return;
+            if (estimate.quota <= 0 || !isFinite(estimate.quota) || !isFinite(estimate.usage)) return;
             const free = estimate.quota - estimate.usage;
+            if (free <= 0) return;
             if (free < bytes * 1.1 + 1024 * 1024) {
-                const error = new Error(tr('storageInsufficient'));
-                error.name = 'StorageError';
-                throw error;
+                console.warn('Storage estimate is low; attempting cache anyway.', {
+                    free: free,
+                    needed: bytes,
+                    quota: estimate.quota,
+                    usage: estimate.usage
+                });
             }
         } catch (error) {
-            if (error && error.name === 'StorageError') throw error;
-            // 其他 estimate 失敗不阻擋下載，寫入失敗時仍會顯示 storageError
+            // estimate 失敗不阻擋下載
         }
     }
 

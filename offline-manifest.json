@@ -1,5 +1,5 @@
 {
-  "version": "c7a4e6e7b1408d6b",
+  "version": "4b96341ba61b64b0",
   "files": {
     "favicon.ico": {
       "hash": "1c9417921c58f9e94237e9851e9b466f6f79c1fb",
@@ -1546,12 +1546,12 @@
       "size": 85569
     },
     "index.html": {
-      "hash": "6cc2b654b875a1b82f8209e752a830f2899b3c02",
+      "hash": "6b053b30d8588db8d0bf78c56440c18ba3a1e3ba",
       "size": 12430
     },
     "offline.js": {
-      "hash": "f942c6a34edd6c7db15f7bad51774a09123e0968",
-      "size": 70471
+      "hash": "46882293361fb04950b0a988e616e4f85c0b3788",
+      "size": 70694
     },
     "script.js": {
       "hash": "5ce345932d2ebd9627d797739159ec9dbb034fca",
