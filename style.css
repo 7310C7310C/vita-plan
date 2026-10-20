@@ -1667,38 +1667,29 @@ margin-bottom: 10px;
 /* ==================== 离线歌谱 ==================== */
 .offline-card {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    justify-content: center;
+    gap: 8px;
     margin: 0 10px 15px;
-    padding: 12px 16px;
+    padding: 14px 16px;
     background: #ede5db;
     border: 1px solid #d4c8b8;
     border-radius: 10px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06);
-}
-
-.offline-card-info {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    min-width: 0;
-}
-
-.offline-card-title {
-    font-weight: 700;
-    color: #6b4f3b;
-    font-size: 1rem;
+    text-align: center;
 }
 
 .offline-card-status {
-    color: #8c6a4d;
+    color: #6b4f3b;
     font-size: 0.85rem;
+    text-align: center;
     overflow-wrap: anywhere;
 }
 
 .offline-card-btn {
-    flex-shrink: 0;
+    min-width: 170px;
+    max-width: 100%;
     min-height: 44px;
     padding: 8px 16px;
     border: none;
@@ -1732,10 +1723,6 @@ body.christmas-theme .offline-card {
     background: rgba(255, 255, 255, 0.1);
     border-color: #ffd700;
     backdrop-filter: blur(10px);
-}
-
-body.christmas-theme .offline-card-title {
-    color: #ffd700;
 }
 
 body.christmas-theme .offline-card-status {
@@ -1882,11 +1869,8 @@ body.christmas-theme .vp-offline-btn.primary {
 }
 
 @media (max-width: 560px) {
-    .offline-card {
-        flex-wrap: wrap;
-    }
-
     .offline-card-btn {
-        width: 100%;
+        min-width: 0;
+        width: 80%;
     }
 }

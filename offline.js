@@ -52,14 +52,13 @@
 
     const I18N = {
         zh: {
-            title: '离线歌谱',
             notDownloaded: '未下载',
             incomplete: '缓存不完整',
             working: '处理中……',
             downloadAll: '下载全部（约 36MB）',
             continue: '继续下载',
             checkUpdate: '检查更新',
-            cachedStatus: '已缓存 {n}/{n} 张 · {date}',
+            cachedStatus: '更新于 {date}',
             reading: '正在读取离线状态……',
             unavailableButton: '离线缓存不可用',
             swUnsupported: '此浏览器不支持离线缓存。',
@@ -73,7 +72,7 @@
             otherTabUpdated: '另一分页已更新离线缓存，请重新检查更新。',
             contentMismatch: '文件内容与离线清单不一致，已停止操作。',
             integrityUnsupported: '此浏览器不支持完整性校验。',
-            incompleteManifest: '仍有 {n} 个文件缺失，缓存不完整。',
+            incompleteManifest: '缓存不完整，请重试。',
             storageInsufficient: '可用存储空间不足，无法完成离线缓存。',
             downloadTitle: '正在下载乐谱',
             downloadMsg: '首次下载全部乐谱，完成后可离线打开。请保持页面打开。',
@@ -81,43 +80,38 @@
             checkMsg: '正在比对页面与乐谱文件，请稍候。',
             updateTitle: '正在更新乐谱',
             updateMsg: '只下载有变更的文件，请保持页面打开。',
-            progress: '已处理 {done}/{total}',
-            progressBytes: '已处理 {done}/{total} · {size}',
             upToDate: '已是最新版本',
             confirmTitle: '发现新版本',
-            confirmMsg: '共 {n} 个文件有更新，约 {size}。是否立即更新？',
-            confirmNoSize: '共 {n} 个文件有更新，是否立即更新？',
+            confirmMsg: '发现新版本，是否立即更新？',
             updateNow: '立即更新',
             cancel: '取消',
             doneTitle: '下载完成',
             updateDoneTitle: '更新完成',
             doneMsg: '已保存到此浏览器，刷新页面后生效。',
             refresh: '刷新页面',
-            later: '稍后',
             errorTitle: '操作失败',
             errorMsg: '{msg}',
             retry: '重试',
             close: '关闭',
             offlineError: '目前离线，请联网后再试。',
             storageError: '存储空间不足，无法完成下载。',
-            downloadFailed: '有 {n} 个文件下载失败，已下载的部分会保留，可重试续传。',
-            updateFailed: '有 {n} 个文件更新失败，旧版本仍可继续使用。',
+            downloadFailed: '部分文件下载失败，已下载的部分会保留，可重试续传。',
+            updateFailed: '部分文件更新失败，旧版本仍可继续使用。',
             checkFailed: '检查更新失败，请稍后重试。',
             checkTimeout: '检查更新超时，请检查网络后重试。',
-            downloadTimeout: '有 {n} 个文件下载超时，已下载的部分会保留，可重试续传。',
-            updateTimeout: '有 {n} 个文件更新超时，旧版本仍可继续使用。',
+            downloadTimeout: '部分文件下载超时，已下载的部分会保留，可重试续传。',
+            updateTimeout: '部分文件更新超时，旧版本仍可继续使用。',
             requestFailed: '文件请求失败（HTTP {status}）。',
             timeout: '请求超时（{seconds} 秒），请检查网络后重试。'
         },
         en: {
-            title: 'Offline Sheet Music',
             notDownloaded: 'Not downloaded',
             incomplete: 'Cache incomplete',
             working: 'Working...',
             downloadAll: 'Download all (about 36MB)',
             continue: 'Continue download',
             checkUpdate: 'Check for updates',
-            cachedStatus: 'Cached {n}/{n} · {date}',
+            cachedStatus: 'Updated {date}',
             reading: 'Reading offline status...',
             unavailableButton: 'Offline cache unavailable',
             swUnsupported: 'This browser does not support offline caching.',
@@ -131,7 +125,7 @@
             otherTabUpdated: 'Another tab updated the offline cache. Please check for updates again.',
             contentMismatch: 'A downloaded file did not match the offline manifest. The operation was stopped.',
             integrityUnsupported: 'This browser does not support integrity verification.',
-            incompleteManifest: '{n} files are still missing; the cache is incomplete.',
+            incompleteManifest: 'The cache is incomplete. Please retry.',
             storageInsufficient: 'There is not enough storage to finish the offline cache.',
             downloadTitle: 'Downloading sheet music',
             downloadMsg: 'Download all sheet music once, then open them offline. Keep this page open.',
@@ -139,31 +133,27 @@
             checkMsg: 'Comparing local files with the server. Please wait.',
             updateTitle: 'Updating sheet music',
             updateMsg: 'Only changed files will be downloaded. Keep this page open.',
-            progress: '{done}/{total} processed',
-            progressBytes: '{done}/{total} · {size}',
             upToDate: 'You are up to date',
             confirmTitle: 'Update available',
-            confirmMsg: '{n} files have changed, about {size}. Update now?',
-            confirmNoSize: '{n} files have changed. Update now?',
+            confirmMsg: 'A new version is available. Update now?',
             updateNow: 'Update now',
             cancel: 'Cancel',
             doneTitle: 'Download complete',
             updateDoneTitle: 'Update complete',
             doneMsg: 'Saved in this browser. Refresh the page to apply.',
             refresh: 'Refresh page',
-            later: 'Later',
             errorTitle: 'Something went wrong',
             errorMsg: '{msg}',
             retry: 'Retry',
             close: 'Close',
             offlineError: 'You are offline. Please reconnect and try again.',
             storageError: 'Not enough storage to finish the download.',
-            downloadFailed: '{n} files failed to download. Downloaded files are kept for resume.',
-            updateFailed: '{n} files failed to update. The previous version is still available.',
+            downloadFailed: 'Some files failed to download. Downloaded files are kept for resume.',
+            updateFailed: 'Some files failed to update. The previous version is still available.',
             checkFailed: 'Could not check for updates. Please try again.',
             checkTimeout: 'Checking for updates timed out. Please check your connection and retry.',
-            downloadTimeout: '{n} files timed out while downloading. Downloaded files are kept for resume.',
-            updateTimeout: '{n} files timed out while updating. The previous version is still available.',
+            downloadTimeout: 'Some files timed out while downloading. Downloaded files are kept for resume.',
+            updateTimeout: 'Some files timed out while updating. The previous version is still available.',
             requestFailed: 'Request failed (HTTP {status}).',
             timeout: 'The request timed out after {seconds} seconds. Please check your connection and retry.'
         }
@@ -625,11 +615,9 @@
     }
 
     function showOfflineUnavailable(message) {
-        const title = offlineTitleEl();
         const status = offlineStatusEl();
         const btn = offlineButtonEl();
-        if (!title || !status || !btn) return;
-        title.textContent = tr('title');
+        if (!status || !btn) return;
         status.textContent = message || tr('swRegisterFailed');
         btn.textContent = tr('unavailableButton');
         btn.disabled = true;
@@ -654,18 +642,13 @@
         return u.href;
     }
 
-    function formatSize(bytes) {
-        if (!bytes || bytes <= 0) return '';
-        if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
-        return Math.max(1, Math.round(bytes / 1024)) + ' KB';
-    }
-
     function formatDate(value) {
         if (!value) return '';
         const d = new Date(value);
         if (isNaN(d.getTime())) return '';
         const pad = function (n) { return n < 10 ? '0' + n : String(n); };
-        return d.getFullYear() + '/' + pad(d.getMonth() + 1) + '/' + pad(d.getDate());
+        return d.getFullYear() + '/' + pad(d.getMonth() + 1) + '/' + pad(d.getDate())
+            + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
     }
 
     function toast(message) {
@@ -921,22 +904,19 @@
         }
     }
 
-    function offlineTitleEl() { return document.getElementById('offlineTitle'); }
     function offlineStatusEl() { return document.getElementById('offlineStatus'); }
     function offlineButtonEl() { return document.getElementById('offlineActionBtn'); }
 
     async function refreshUI() {
-        const title = offlineTitleEl();
         const status = offlineStatusEl();
         const btn = offlineButtonEl();
-        if (!title || !status || !btn) return;
+        if (!status || !btn) return;
         if (!locksSupported) {
             showLocksUnsupported();
             return;
         }
         if (!initialized && !busy) return;
 
-        title.textContent = tr('title');
         if (busy) {
             status.textContent = tr('working');
             btn.textContent = tr('working');
@@ -975,9 +955,7 @@
             return;
         }
 
-        const count = state.imageCount || Object.keys(state.files || {}).length;
         status.textContent = tr('cachedStatus', {
-            n: count,
             date: formatDate(state.updatedAt)
         });
         btn.textContent = tr('checkUpdate');
@@ -1145,7 +1123,7 @@
         if (!overlayOpen) lastFocusedElement = document.activeElement;
         overlayOpen = true;
         overlayInteractive = !!(options.actions && options.actions.length);
-        overlayEscape = options.onCancel || hideOverlay;
+        overlayEscape = options.dismissible === false ? null : (options.onCancel || hideOverlay);
         if (!overlayKeydown) {
             overlayKeydown = handleOverlayKeydown;
             document.addEventListener('keydown', overlayKeydown, true);
@@ -1231,12 +1209,7 @@
         const percent = total ? Math.min(100, (done / total) * 100) : 0;
         if (bar) bar.style.width = percent + '%';
         if (progress) progress.setAttribute('aria-valuenow', String(Math.round(percent)));
-        if (count) {
-            const size = formatSize(bytes);
-            count.textContent = size
-                ? tr('progressBytes', { done: done, total: total, size: size })
-                : tr('progress', { done: done, total: total });
-        }
+        if (count) count.textContent = '';
     }
 
     function errorMessage(error) {
@@ -1270,9 +1243,9 @@
             isUpdate ? tr('updateDoneTitle') : tr('doneTitle'),
             tr('doneMsg'),
             {
+                dismissible: false,
                 actions: [
-                    { label: tr('refresh'), primary: true, onClick: function () { location.reload(); } },
-                    { label: tr('later'), onClick: hideOverlay }
+                    { label: tr('refresh'), primary: true, onClick: function () { location.reload(); } }
                 ]
             }
         );
@@ -1541,16 +1514,9 @@
                 return;
             }
 
-            const totalSize = diff.changed.reduce(function (sum, item) {
-                return sum + Number(item.size || 0);
-            }, 0);
-            const count = diff.changed.length + diff.removed.length;
-            const sizeText = formatSize(totalSize);
             showOverlay(
                 tr('confirmTitle'),
-                sizeText
-                    ? tr('confirmMsg', { n: count, size: sizeText })
-                    : tr('confirmNoSize', { n: count }),
+                tr('confirmMsg'),
                 {
                     onCancel: cancelUpdateCheck,
                     actions: [

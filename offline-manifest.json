@@ -1,5 +1,5 @@
 {
-  "version": "2710568e32be1778",
+  "version": "c7a4e6e7b1408d6b",
   "files": {
     "favicon.ico": {
       "hash": "1c9417921c58f9e94237e9851e9b466f6f79c1fb",
@@ -1546,12 +1546,12 @@
       "size": 85569
     },
     "index.html": {
-      "hash": "4100735728a964c66266e21ab7cc211396acc4fd",
-      "size": 12558
+      "hash": "6cc2b654b875a1b82f8209e752a830f2899b3c02",
+      "size": 12430
     },
     "offline.js": {
-      "hash": "64feb935adb93df67fbed40a9ecf39f5736d1ab2",
-      "size": 72167
+      "hash": "f942c6a34edd6c7db15f7bad51774a09123e0968",
+      "size": 70471
     },
     "script.js": {
       "hash": "5ce345932d2ebd9627d797739159ec9dbb034fca",
@@ -1562,8 +1562,8 @@
       "size": 22289
     },
     "style.css": {
-      "hash": "6708b582238247c03b432d5cab3314a40af9be17",
-      "size": 39305
+      "hash": "a66a790f977a2a13407dfaf87a838462201b0d1a",
+      "size": 39108
     }
   }
 }
