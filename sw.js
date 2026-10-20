@@ -27,16 +27,20 @@ function openMetaDB() {
 function readState() {
     return openMetaDB().then(function (db) {
         return new Promise(function (resolve, reject) {
+            let result = null;
             const tx = db.transaction(META_STORE, 'readonly');
             const req = tx.objectStore(META_STORE).get(META_KEY);
-            req.onsuccess = function () { resolve(req.result || null); };
-            req.onerror = function () { reject(req.error); };
+            req.onsuccess = function () { result = req.result || null; };
+            // 不留下長連線，否則頁面在 legacy 模式刪除 DB 時會被 SW 阻塞
+            tx.oncomplete = function () { db.close(); resolve(result); };
+            tx.onerror = function () { db.close(); reject(tx.error); };
+            tx.onabort = function () { db.close(); reject(tx.error); };
         });
     });
 }
 
-async function getState() {
-    if (cachedState !== null && Date.now() - cachedStateAt < 1000) {
+async function getState(force) {
+    if (!force && cachedState !== null && Date.now() - cachedStateAt < 1000) {
         return cachedState;
     }
     try {
@@ -91,13 +95,15 @@ async function handleFetch(event) {
         }
     }
 
-    const state = await getState();
+    const isIndex = keyPath === scopePath + 'index.html';
+    const isSongs = keyPath === scopePath + 'songs.json';
+    const isOfflineScript = keyPath === scopePath + 'offline.js';
+    // 導航與 offline.js 需要寫回「目前」active cache；更新剛提交時不能沿用舊的快取狀態
+    const state = await getState(isIndex || isOfflineScript);
     if (!state || !state.caches || !state.caches.length || !state.files) {
         return fetch(req);
     }
 
-    const isIndex = keyPath === scopePath + 'index.html';
-    const isSongs = keyPath === scopePath + 'songs.json';
     let relativeKey = keyPath;
     if (relativeKey.indexOf(scopePath) === 0) {
         relativeKey = relativeKey.slice(scopePath.length);
@@ -123,6 +129,33 @@ async function handleFetch(event) {
         try {
             return await fetchSongs(req);
         } catch (e) {
+            return offlineResponse();
+        }
+    }
+
+    if (isIndex || isOfflineScript) {
+        // 導航與偵測腳本 network-first：線上永遠先拿新檔並寫回 active cache，
+        // 讓舊版 SW 的使用者能載入新的容量偵測邏輯；失敗或離線才用快照。
+        try {
+            const fresh = await fetch(req, { cache: 'no-store' });
+            if (!fresh || !fresh.ok) {
+                if (found) return found;
+                return fresh || offlineResponse();
+            }
+            const activeCache = state.caches[0];
+            if (activeCache) {
+                try {
+                    if (await caches.has(activeCache)) {
+                        const cache = await caches.open(activeCache);
+                        await cache.put(key, fresh.clone());
+                    }
+                } catch (e) {
+                    // 配額不足或 cache 已被移除時仍回傳最新內容
+                }
+            }
+            return fresh;
+        } catch (e) {
+            if (found) return found;
             return offlineResponse();
         }
     }

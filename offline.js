@@ -26,6 +26,9 @@
     const COMPACT_THRESHOLD = 4;
     const COMPACT_HEADROOM = 1.15;
     const COMPACT_MIN_FREE = 1024 * 1024;
+    const MIN_STORAGE_QUOTA = 48 * 1024 * 1024;
+    const MIN_STORAGE_FREE = 40 * 1024 * 1024;
+    const LEGACY_RELOAD_KEY = 'vp_offline_legacy_reload';
     const SELF_SRC = document.currentScript && document.currentScript.src
         ? document.currentScript.src
         : new URL('offline.js', location.href).href;
@@ -233,10 +236,14 @@
     function loadState() {
         return openDB().then(function (db) {
             return new Promise(function (resolve, reject) {
+                let result = null;
                 const tx = db.transaction(STORE_NAME, 'readonly');
                 const req = tx.objectStore(STORE_NAME).get(STATE_KEY);
-                req.onsuccess = function () { resolve(req.result || null); };
-                req.onerror = function () { reject(req.error); };
+                req.onsuccess = function () { result = req.result || null; };
+                // 不留下長連線，讓 legacy 清理或其他分頁能刪除 DB
+                tx.oncomplete = function () { db.close(); resolve(result); };
+                tx.onerror = function () { db.close(); reject(tx.error); };
+                tx.onabort = function () { db.close(); reject(tx.error); };
             });
         });
     }
@@ -247,8 +254,9 @@
             return new Promise(function (resolve, reject) {
                 const tx = db.transaction(STORE_NAME, 'readwrite');
                 tx.objectStore(STORE_NAME).put(snapshot, STATE_KEY);
-                tx.oncomplete = function () { resolve(); };
-                tx.onerror = function () { reject(tx.error); };
+                tx.oncomplete = function () { db.close(); resolve(); };
+                tx.onerror = function () { db.close(); reject(tx.error); };
+                tx.onabort = function () { db.close(); reject(tx.error); };
             });
         });
     }
@@ -1715,12 +1723,158 @@
         }
     }
 
+    async function storageCapabilitySufficient() {
+        if (!navigator.serviceWorker
+            || typeof navigator.serviceWorker.register !== 'function'
+            || typeof navigator.serviceWorker.getRegistrations !== 'function') {
+            return false;
+        }
+        if (!('caches' in window) || !window.caches
+            || typeof caches.open !== 'function'
+            || typeof caches.match !== 'function'
+            || typeof caches.delete !== 'function'
+            || typeof caches.keys !== 'function') {
+            return false;
+        }
+        if (!('indexedDB' in window) || !window.indexedDB
+            || typeof indexedDB.open !== 'function'
+            || typeof indexedDB.deleteDatabase !== 'function') {
+            return false;
+        }
+        if (!navigator.locks || typeof navigator.locks.request !== 'function') return false;
+        if (!window.crypto || !window.crypto.subtle
+            || typeof window.crypto.subtle.digest !== 'function') {
+            return false;
+        }
+        if (!navigator.storage || typeof navigator.storage.estimate !== 'function') return false;
+        try {
+            const estimate = await navigator.storage.estimate();
+            if (!estimate
+                || typeof estimate.quota !== 'number'
+                || typeof estimate.usage !== 'number') {
+                return false;
+            }
+            if (!isFinite(estimate.quota) || estimate.quota <= 0
+                || !isFinite(estimate.usage) || estimate.usage < 0) {
+                return false;
+            }
+            const free = estimate.quota - estimate.usage;
+            if (!isFinite(free) || free < 0) return false;
+            return estimate.quota >= MIN_STORAGE_QUOTA && free >= MIN_STORAGE_FREE;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function hideOfflineSection() {
+        const section = document.getElementById('offlineSection');
+        if (section) section.style.display = 'none';
+    }
+
+    async function unregisterSiteWorkers() {
+        try {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            const mine = (registrations || []).filter(function (registration) {
+                return registration.scope.indexOf(BASE_URL) === 0;
+            });
+            await Promise.all(mine.map(function (registration) {
+                return registration.unregister().catch(function () {});
+            }));
+        } catch (e) {
+            // 取消失敗時仍清資料；下次載入會再試
+        }
+    }
+
+    async function deleteLegacyCaches() {
+        try {
+            const names = await caches.keys();
+            const legacy = names.filter(function (name) {
+                return name.indexOf(CACHE_PREFIX) === 0;
+            });
+            await Promise.all(legacy.map(function (name) {
+                return caches.delete(name).catch(function () {});
+            }));
+        } catch (e) {
+            // cache 已不可用時沒有可清理的內容
+        }
+    }
+
+    function deleteLegacyDatabase() {
+        return new Promise(function (resolve) {
+            let finished = false;
+            function finish() {
+                if (finished) return;
+                finished = true;
+                resolve();
+            }
+            if (!window.indexedDB || typeof indexedDB.deleteDatabase !== 'function') {
+                finish();
+                return;
+            }
+            let request;
+            try {
+                request = indexedDB.deleteDatabase(DB_NAME);
+            } catch (e) {
+                finish();
+                return;
+            }
+            request.onsuccess = finish;
+            request.onerror = finish;
+            // 其他分頁或舊 SW 仍持有連線時不阻塞頁面；重載後會再次嘗試
+            request.onblocked = finish;
+            setTimeout(finish, 5000);
+        });
+    }
+
+    function reloadOnceFromLegacy() {
+        let controlled = false;
+        try {
+            controlled = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+        } catch (e) {
+            controlled = false;
+        }
+        if (!controlled || !navigator.onLine) return;
+        let flagged = false;
+        try {
+            if (sessionStorage.getItem(LEGACY_RELOAD_KEY) === '1') return;
+            sessionStorage.setItem(LEGACY_RELOAD_KEY, '1');
+            flagged = true;
+        } catch (e) {
+            flagged = false;
+        }
+        if (flagged) location.reload();
+    }
+
+    async function enterLegacyMode() {
+        hideOfflineSection();
+        try {
+            if (broadcastChannel) broadcastChannel.close();
+        } catch (e) {
+            // ignore
+        }
+        await unregisterSiteWorkers();
+        await deleteLegacyCaches();
+        await deleteLegacyDatabase();
+        setImageVersion('');
+        reloadOnceFromLegacy();
+    }
+
     async function init() {
         if (!document.getElementById('offlineSection')) return;
-        if (!('caches' in window) || !('indexedDB' in window)) {
-            const section = document.getElementById('offlineSection');
-            if (section) section.style.display = 'none';
+        let capable = false;
+        try {
+            capable = await storageCapabilitySufficient();
+        } catch (e) {
+            capable = false;
+        }
+        if (!capable) {
+            await enterLegacyMode();
             return;
+        }
+        try {
+            sessionStorage.removeItem(LEGACY_RELOAD_KEY);
+        } catch (e) {
+            // sessionStorage 不可用不影響正常模式
         }
         const initialBtn = offlineButtonEl();
         const initialStatus = offlineStatusEl();
