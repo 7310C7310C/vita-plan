@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate offline-manifest.json for the Vita Plan offline sheet music cache.
+"""Generate data/offline-manifest.json for the Vita Plan offline sheet music cache.
 
 The manifest is the single source of truth for incremental offline updates.
 Each entry uses the Git blob SHA (content identifier) and the file size.
@@ -8,9 +8,10 @@ Default source: `git ls-tree -r -l HEAD` (exactly what a committed tree has).
 For an uncommitted working tree, pass --working-tree.
 
 Only these paths are included:
-  index.html, style.css, script.js, offline.js, songs.json, favicon.ico, img/**
+  index.html, assets/css/style.css, assets/js/script.js, assets/js/offline.js,
+  data/songs.json, favicon.ico, img/**
 Everything else (admin, docs, README, .github, scripts, sql, key, random, sw.js,
-offline-manifest.json itself, ...) is excluded.
+data/offline-manifest.json itself, ...) is excluded.
 """
 from __future__ import annotations
 
@@ -23,13 +24,13 @@ from pathlib import Path
 
 SHELL_FILES = [
     'index.html',
-    'style.css',
-    'script.js',
-    'offline.js',
-    'songs.json',
+    'assets/css/style.css',
+    'assets/js/script.js',
+    'assets/js/offline.js',
+    'data/songs.json',
     'favicon.ico',
 ]
-MANIFEST_NAME = 'offline-manifest.json'
+MANIFEST_NAME = 'data/offline-manifest.json'
 
 
 def is_allowed(path: str) -> bool:
@@ -109,7 +110,7 @@ def main() -> int:
     parser.add_argument('--working-tree', action='store_true',
                         help='hash files on disk instead of a committed git tree')
     parser.add_argument('--output', default=None,
-                        help='output path (default: <root>/offline-manifest.json)')
+                        help='output path (default: <root>/data/offline-manifest.json)')
     parser.add_argument('--check', action='store_true',
                         help='verify the existing manifest instead of writing it')
     args = parser.parse_args()

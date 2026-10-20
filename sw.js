@@ -6,6 +6,7 @@ const META_DB = 'vita_plan_offline';
 const META_STORE = 'meta';
 const META_KEY = 'state';
 const BYPASS_HEADER = 'x-vp-offline-bypass';
+const NETWORK_FIRST_TIMEOUT = 3000;
 
 let cachedState = null;
 let cachedStateAt = 0;
@@ -74,8 +75,21 @@ function offlineResponse() {
     return new Response('', { status: 504, statusText: 'Offline' });
 }
 
+async function fetchNetworkFirst(request) {
+    if (typeof AbortController !== 'function') {
+        return fetch(request, { cache: 'no-store' });
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(function () { controller.abort(); }, NETWORK_FIRST_TIMEOUT);
+    try {
+        return await fetch(request, { cache: 'no-store', signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 async function fetchSongs(request) {
-    // songs.json 只能由離線清單的手動下載/更新寫入；SW 不寫 active cache，
+    // data/songs.json 只能由離線清單的手動下載/更新寫入；SW 不寫 active cache，
     // 避免部分 cache 缺失時把新目錄混進舊快照。
     return await fetch(request, { cache: 'no-store' });
 }
@@ -96,12 +110,29 @@ async function handleFetch(event) {
     }
 
     const isIndex = keyPath === scopePath + 'index.html';
-    const isSongs = keyPath === scopePath + 'songs.json';
-    const isOfflineScript = keyPath === scopePath + 'offline.js';
-    // 導航與 offline.js 需要寫回「目前」active cache；更新剛提交時不能沿用舊的快取狀態
+    const isSongs = keyPath === scopePath + 'data/songs.json';
+    const isOfflineScript = keyPath === scopePath + 'assets/js/offline.js';
     const state = await getState(isIndex || isOfflineScript);
-    if (!state || !state.caches || !state.caches.length || !state.files) {
+    if (!state || !state.files) {
         return fetch(req);
+    }
+
+    const cacheNames = Array.isArray(state.caches) ? state.caches : [];
+    const key = requestForPath(keyPath);
+    const found = cacheNames.length ? await matchAny(cacheNames, key) : null;
+
+    if (isIndex || isOfflineScript) {
+        // 導航與偵測腳本 network-first，只回傳網絡結果、不寫 cache：
+        // 舊 SW 使用者可拿到新 offline.js，但舊快照不會被新 index 污染。
+        try {
+            const fresh = await fetchNetworkFirst(req);
+            if (fresh && fresh.ok) return fresh;
+            if (found) return found;
+            return fresh || offlineResponse();
+        } catch (e) {
+            if (found) return found;
+            return offlineResponse();
+        }
     }
 
     let relativeKey = keyPath;
@@ -113,49 +144,19 @@ async function handleFetch(event) {
     } catch (e) {
         // keep the encoded path if it is malformed
     }
-    const known = isIndex || isSongs
+    const known = isSongs
         || Object.prototype.hasOwnProperty.call(state.files, relativeKey);
     if (!known) {
         return fetch(req);
     }
 
-    const key = requestForPath(keyPath);
-    const found = await matchAny(state.caches, key);
-
     if (isSongs) {
         // 與其他資源一致：cache-first。不在背景更新 active cache，
-        // 讓離線快照（songs.json + 圖片）保持原子性；新目錄只在手動更新時整體切換。
+        // 讓離線快照（data/songs.json + 圖片）保持原子性；新目錄只在手動更新時整體切換。
         if (found) return found;
         try {
             return await fetchSongs(req);
         } catch (e) {
-            return offlineResponse();
-        }
-    }
-
-    if (isIndex || isOfflineScript) {
-        // 導航與偵測腳本 network-first：線上永遠先拿新檔並寫回 active cache，
-        // 讓舊版 SW 的使用者能載入新的容量偵測邏輯；失敗或離線才用快照。
-        try {
-            const fresh = await fetch(req, { cache: 'no-store' });
-            if (!fresh || !fresh.ok) {
-                if (found) return found;
-                return fresh || offlineResponse();
-            }
-            const activeCache = state.caches[0];
-            if (activeCache) {
-                try {
-                    if (await caches.has(activeCache)) {
-                        const cache = await caches.open(activeCache);
-                        await cache.put(key, fresh.clone());
-                    }
-                } catch (e) {
-                    // 配額不足或 cache 已被移除時仍回傳最新內容
-                }
-            }
-            return fresh;
-        } catch (e) {
-            if (found) return found;
             return offlineResponse();
         }
     }
@@ -205,7 +206,7 @@ self.addEventListener('fetch', function (event) {
     if (req.headers.has(BYPASS_HEADER)) return;
     if (isAdminPath(url.pathname)) return;
     const scopePath = new URL(self.registration.scope).pathname;
-    if (url.pathname === scopePath + 'offline-manifest.json') return;
+    if (url.pathname === scopePath + 'data/offline-manifest.json') return;
 
     event.respondWith(handleFetch(event).catch(function () {
         return fetch(req).catch(function () {

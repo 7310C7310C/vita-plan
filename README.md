@@ -47,6 +47,13 @@
 - 离线缓存只保存在**当前浏览器、当前网址**。清理网站数据、使用无痕模式、更换设备或更换网址（不同 origin）都会失效，需要重新下载。
 - 下载／更新期间请保持页面打开；中断后可点「继续下载」或重新检查更新。
 
+## 低容量／不支持的浏览器
+
+- 没有完整离线 cache，且浏览器回报 quota 低于 48MB 或 free 低于 40MB 时，离线卡片会隐藏、卸载 Service Worker、清除离线 cache 与 IndexedDB，并自动重新整理一次；之后以一般线上模式使用。
+- 已有完整离线 cache 不会因容量数字偏低被清除，会保留离线歌谱并继续显示「缓存于……」。
+- 缺少 Web Locks 等离线 API，或无法确认存储容量时，保留既有 cache，只显示「离线缓存不可用」。
+- 可用 <https://kcan.cc/tools/storage-test.html> 检测当前浏览器与设备的离线缓存能力；此页只读取 origin，不会写入歌谱数据。
+
 ## 中英文界面
 
 - 右上角「中/En」可切换界面语言，选择会被记住。
@@ -57,6 +64,7 @@
 
 - **转调对照表**：<https://kcan.cc/key/> — 选择源调与目标调，快速查看对应音名。
 - **随机音符播放器**：<https://kcan.cc/random/> — 随机出音练习，可设置音色、次数和自定义练习音符。
+- **离线缓存容量检测**：<https://kcan.cc/tools/storage-test.html> — 检测当前浏览器与设备的离线缓存能力，不会写入歌谱数据。
 
 ## 使用提示
 
@@ -92,13 +100,13 @@
 
 建议等 Actions 执行成功后再通知乐队成员。
 
-**离线清单**：后台发布会根据最终 Git tree 自动生成 `offline-manifest.json`。如果是手动修改 `index.html`、`style.css`、`script.js`、`offline.js`、`songs.json`、`favicon.ico` 或 `img/**`，必须先运行：
+**离线清单**：后台发布会根据最终 Git tree 自动生成 `data/offline-manifest.json`。如果是手动修改 `index.html`、`assets/css/style.css`、`assets/js/script.js`、`assets/js/offline.js`、`data/songs.json`、`favicon.ico` 或 `img/**`，必须先运行：
 
 ```bash
 python3 scripts/generate_offline_manifest.py
 ```
 
-再把 manifest 一起 commit。手动修改图片以外的页面资源时，还要同步 bump `index.html` 里对应的 `?v=`（`script.js`、`style.css`、`offline.js`）；若改了 `songs.json`，也要 bump `script.js` 里的 `jsonVersion`。否则浏览器可能继续使用 HTTP/memory cache 里的旧资源。后台发布会自动处理这些版本号。
+再把 manifest 一起 commit。手动修改图片以外的页面资源时，还要同步 bump `index.html` 里对应的 `?v=`（`assets/js/script.js`、`assets/css/style.css`、`assets/js/offline.js`）；若改了 `data/songs.json`，也要 bump `assets/js/script.js` 里的 `jsonVersion`。否则浏览器可能继续使用 HTTP/memory cache 里的旧资源。后台发布会自动处理这些版本号。
 
 GitHub Actions 部署前会运行 `python3 scripts/generate_offline_manifest.py --check`；manifest 过期会让部署失败，不会更新 VPS。
 
@@ -109,7 +117,7 @@ img/<分类>/<分类>_<编号>_<标题>_<页码>.jpeg
 img/<分类>/<分类>_<编号>_<标题>_<版本>_<页码>.jpeg
 ```
 
-仓库为纯静态 HTML/CSS/JavaScript，无构建步骤；歌曲索引在 `songs.json`。仓库地址：<https://github.com/7310C7310C/vita-plan>。英文名统一写作 **Vita Plan**。
+仓库为纯静态 HTML/CSS/JavaScript，无构建步骤；歌曲索引在 `data/songs.json`。仓库地址：<https://github.com/7310C7310C/vita-plan>。英文名统一写作 **Vita Plan**。
 
 </details>
 

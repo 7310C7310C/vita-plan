@@ -11,7 +11,7 @@ function versionedImageUrl(path) {
 
 // 加载数据的函数
 function loadSongsData() {
-    fetch(`songs.json?v=${jsonVersion}`)
+    fetch(`data/songs.json?v=${jsonVersion}`)
         .then(response => {
             if (!response.ok) {
                 throw new Error('网络响应错误');

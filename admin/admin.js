@@ -16,9 +16,10 @@ const IS_LOCALHOST = location.hostname === 'localhost' || location.hostname === 
 
 // ==================== Offline manifest helpers ====================
 // Keep this block self-contained: scripts/generate_offline_manifest.py mirrors it.
-const OFFLINE_MANIFEST_PATH = 'offline-manifest.json';
+const OFFLINE_MANIFEST_PATH = 'data/offline-manifest.json';
 const OFFLINE_SHELL_FILES = [
-    'index.html', 'style.css', 'script.js', 'offline.js', 'songs.json', 'favicon.ico'
+    'index.html', 'assets/css/style.css', 'assets/js/script.js', 'assets/js/offline.js',
+    'data/songs.json', 'favicon.ico'
 ];
 
 function isOfflineManifestPath(path) {
@@ -404,9 +405,9 @@ const github = {
 
 // ==================== 应用状态管理 ====================
 const appState = {
-    originalSongsData: null,      // GitHub 上的原始 songs.json
+    originalSongsData: null,      // GitHub 上的原始 data/songs.json
     workingSongsData: null,       // 工作副本
-    originalScriptJs: null,       // GitHub 上的原始 script.js
+    originalScriptJs: null,       // GitHub 上的原始 assets/js/script.js
     workingScriptJs: null,
     originalScriptJsSha: null,
     originalIndexHtml: null,      // GitHub 上的原始 index.html
@@ -676,13 +677,13 @@ async function loadAllData() {
         showToast('正在从 GitHub 加载数据...', '');
         // 并行加载
         const [songsResult, scriptResult, indexResult, imgFilesRaw] = await Promise.all([
-            github.getFile('songs.json'),
-            github.getFile('script.js'),
+            github.getFile('data/songs.json'),
+            github.getFile('assets/js/script.js'),
             github.getFile('index.html'),
             github.getFileList('img').catch(() => [])
         ]);
-        if (!songsResult || !songsResult.content) throw new Error('无法加载 songs.json');
-        if (!scriptResult || !scriptResult.content) throw new Error('无法加载 script.js');
+        if (!songsResult || !songsResult.content) throw new Error('无法加载 data/songs.json');
+        if (!scriptResult || !scriptResult.content) throw new Error('无法加载 assets/js/script.js');
         if (!indexResult || !indexResult.content) throw new Error('无法加载 index.html');
 
         appState.originalSongsData = JSON.parse(songsResult.content);
@@ -859,7 +860,7 @@ function renderCategoryList() {
 }
 
 function showRenameCategoryModal(oldName) {
-    // 从 script.js 或待发布翻译中提取现有英文翻译
+    // 从 assets/js/script.js 或待发布翻译中提取现有英文翻译
     let existingEn = extractTranslationFromScript('categories', oldName);
     if (!existingEn && appState._pendingTranslations?.categories?.[oldName]) {
         existingEn = appState._pendingTranslations.categories[oldName];
@@ -993,7 +994,7 @@ function executeRenameCategory(oldName, newName, newNameEn) {
         if (s.category === oldName) s.category = newName;
     });
 
-    // 记录英文翻译更新（将在发布时写入 script.js）
+    // 记录英文翻译更新（将在发布时写入 assets/js/script.js）
     if (newNameEn) {
         appState._pendingTranslations = appState._pendingTranslations || {};
         appState._pendingTranslations.categories = appState._pendingTranslations.categories || {};
@@ -2747,8 +2748,8 @@ async function doPublish() {
         changeLines || '  无',
         hasImgChanges ? `图片: ${imgAdds}新增/${imgDels}删除` : null,
         `涉及文件:`,
-        `  [修改] songs.json`,
-        `  [修改] script.js`,
+        `  [修改] data/songs.json`,
+        `  [修改] assets/js/script.js`,
         `  [修改] index.html`,
         ...imgFiles
     ].filter(Boolean).join('\n');
@@ -2777,8 +2778,8 @@ async function executePublish(commitMsg, newVersion) {
     showToast('正在发布...', '');
     $('publishBtn').disabled = true;
     try {
-        // 1. 检测冲突：重新拉取 GitHub 上的 songs.json
-        const latestSongs = await github.getFile('songs.json');
+        // 1. 检测冲突：重新拉取 GitHub 上的 data/songs.json
+        const latestSongs = await github.getFile('data/songs.json');
         if (latestSongs && latestSongs.content) {
             const latestData = JSON.parse(latestSongs.content);
             const origStr = JSON.stringify(appState.originalSongsData);
@@ -2787,7 +2788,7 @@ async function executePublish(commitMsg, newVersion) {
                 // GitHub 上的数据已发生变化
                 showModal(`
                     <h3>⚠️ 检测到冲突</h3>
-                    <p>自您上次加载数据以来，GitHub 上的 songs.json 已被修改。</p>
+                    <p>自您上次加载数据以来，GitHub 上的 data/songs.json 已被修改。</p>
                     <p style="font-size:0.85rem;">这可能是因为您在另一台设备上进行了发布。</p>
                     <p style="color:var(--warning);">选择「强制覆盖」将用您的更改覆盖远程版本。</p>
                     <div class="modal-actions">
@@ -2813,21 +2814,19 @@ async function executePublish(commitMsg, newVersion) {
 
 async function doActualPublish(commitMsg, newVersion, latestSha) {
     try {
-        // 1. 更新 script.js 中的版本号
+        // 1. 更新 assets/js/script.js 中的版本号
         let scriptContent = appState.workingScriptJs;
         scriptContent = scriptContent.replace(/const jsonVersion = '[^']*'/, `const jsonVersion = '${newVersion}'`);
 
-        // 2. 更新 script.js 中的 translations（同步分类和版本翻译）
+        // 2. 更新 assets/js/script.js 中的 translations（同步分类和版本翻译）
         // 从 workingSongsData 提取所有分类名和版本名，确保 translations 中有它们
         scriptContent = syncTranslations(scriptContent);
 
         // 3. 更新 index.html 中的版本号
         let indexContent = appState.workingIndexHtml;
-        indexContent = indexContent.replace(/script\.js\?v=[^"]*/, `script.js?v=${newVersion}`);
-        indexContent = indexContent.replace(/style\.css\?v=[^"]*/, `style.css?v=${newVersion}`);
-        indexContent = indexContent.replace(/offline\.js\?v=[^"]*/, `offline.js?v=${newVersion}`);
-        indexContent = indexContent.replace(/admin\.css\?v=[^"]*/, `admin.css?v=${newVersion}`);
-        indexContent = indexContent.replace(/admin\.js\?v=[^"]*/, `admin.js?v=${newVersion}`);
+        indexContent = indexContent.replace(/assets\/js\/script\.js\?v=[^"]*/, `assets/js/script.js?v=${newVersion}`);
+        indexContent = indexContent.replace(/assets\/css\/style\.css\?v=[^"]*/, `assets/css/style.css?v=${newVersion}`);
+        indexContent = indexContent.replace(/assets\/js\/offline\.js\?v=[^"]*/, `assets/js/offline.js?v=${newVersion}`);
 
         // 4. 更新 index.html 圣诞主题
         if (appState.christmasTheme) {
@@ -2839,7 +2838,7 @@ async function doActualPublish(commitMsg, newVersion, latestSha) {
             indexContent = indexContent.replace(/class='christmas-theme'/g, '');
         }
 
-        // 5. 序列化 songs.json
+        // 5. 序列化 data/songs.json
         const songsContent = JSON.stringify(appState.workingSongsData, null, 2);
 
         // 6. 获取当前 ref 和 tree
@@ -2848,8 +2847,8 @@ async function doActualPublish(commitMsg, newVersion, latestSha) {
 
         // 7. 创建 blobs
         const blobs = [
-            { path: 'songs.json', content: songsContent, encoding: 'utf-8' },
-            { path: 'script.js', content: scriptContent, encoding: 'utf-8' },
+            { path: 'data/songs.json', content: songsContent, encoding: 'utf-8' },
+            { path: 'assets/js/script.js', content: scriptContent, encoding: 'utf-8' },
             { path: 'index.html', content: indexContent, encoding: 'utf-8' }
         ];
 
@@ -2920,7 +2919,7 @@ async function doActualPublish(commitMsg, newVersion, latestSha) {
 function syncTranslations(scriptContent) {
     // 确保所有分类名和版本名在 translations 中有对应的英文翻译
     // 这里我们不做复杂的 AST 解析，而是确保已有的翻译被保留
-    // 新增的分类/版本如果没有对应翻译，在 script.js 中会被 fallback 到原名
+    // 新增的分类/版本如果没有对应翻译，在 assets/js/script.js 中会被 fallback 到原名
     // 我们可以在发布时提示用户需要补充翻译
     const catNames = Object.keys(appState.workingSongsData.categories);
     const allVersions = [...appState.existingVersions];

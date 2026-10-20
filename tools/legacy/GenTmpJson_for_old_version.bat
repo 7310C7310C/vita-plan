@@ -1,5 +1,6 @@
 @echo off
 chcp 65001 > nul
+cd /d "%~dp0..\.."
 setlocal enabledelayedexpansion
 
 :: 设置输出文件路径

@@ -1,7 +1,7 @@
 /* 離線歌譜管理器
  * - 首次由使用者按下載，將全部樂譜與頁面資源寫入 Cache Storage
  * - 之後由 Service Worker 直接從本機快取提供
- * - 手動檢查更新：以 offline-manifest.json 的 Git blob hash 逐檔比對，只下載有變更的檔案
+ * - 手動檢查更新：以 data/offline-manifest.json 的 Git blob hash 逐檔比對，只下載有變更的檔案
  */
 (function () {
     'use strict';
@@ -13,12 +13,13 @@
     const CACHE_PREFIX = 'vita-plan-assets-';
     const BYPASS_HEADER = 'X-VP-Offline-Bypass';
     const IMAGE_VERSION_KEY = 'vp_offline_version';
-    const MANIFEST_PATH = 'offline-manifest.json';
+    const MANIFEST_PATH = 'data/offline-manifest.json';
     const STATE_SCHEMA = 2;
     const LOCK_NAME = 'vita-plan-offline-v1';
     const BROADCAST_NAME = 'vita-plan-offline';
     const REQUIRED_OFFLINE_FILES = [
-        'index.html', 'style.css', 'script.js', 'offline.js', 'songs.json', 'favicon.ico'
+        'index.html', 'assets/css/style.css', 'assets/js/script.js', 'assets/js/offline.js',
+        'data/songs.json', 'favicon.ico'
     ];
     const GET_TIMEOUT = 60000;
     const SW_READY_TIMEOUT = 12000;
@@ -31,9 +32,9 @@
     const LEGACY_RELOAD_KEY = 'vp_offline_legacy_reload';
     const SELF_SRC = document.currentScript && document.currentScript.src
         ? document.currentScript.src
-        : new URL('offline.js', location.href).href;
-    // 以 offline.js 所在目錄為站台根目錄，兼容 / 與 /vita-plan/ 兩種部署路徑
-    const BASE_URL = new URL('.', SELF_SRC).href;
+        : new URL('assets/js/offline.js', location.href).href;
+    // offline.js 位於 assets/js/，站台根目錄是往上兩層，兼容 / 與 /vita-plan/ 兩種部署路徑
+    const BASE_URL = new URL('../../', SELF_SRC).href;
 
     function setImageVersion(version) {
         const value = typeof version === 'string' ? version : '';
@@ -69,6 +70,9 @@
             swNotReady: '离线缓存尚未就绪，请稍后重试。',
             stateError: '读取离线状态失败，请刷新页面重试。',
             locksUnsupported: '此浏览器不支持离线下载（需要较新浏览器）。',
+            apiUnsupported: '此浏览器不支持离线下载。',
+            storageUnknown: '无法确认浏览器存储容量，离线下载不可用。',
+            legacyCleanupFailed: '离线缓存清理失败，已保留现有数据，请刷新页面重试。',
             manifestMissing: '离线清单缺失或无法读取，请刷新页面后重试。',
             manifestInvalid: '离线清单格式无效，请刷新页面后重试。',
             manifestChanged: '离线清单已被更新，请重新检查更新。',
@@ -121,6 +125,9 @@
             swNotReady: 'Offline cache is not ready yet. Please try again.',
             stateError: 'Could not read offline state. Please refresh and try again.',
             locksUnsupported: 'This browser does not support offline downloads (a newer browser is required).',
+            apiUnsupported: 'This browser does not support offline downloads.',
+            storageUnknown: 'Storage capacity could not be verified; offline download is unavailable.',
+            legacyCleanupFailed: 'Could not clean up the offline cache. Existing data was kept. Please refresh and try again.',
             manifestMissing: 'The offline manifest is missing or unreadable. Please refresh and try again.',
             manifestInvalid: 'The offline manifest is invalid. Please refresh and try again.',
             manifestChanged: 'The offline manifest changed. Please check for updates again.',
@@ -583,7 +590,7 @@
         let registration;
         try {
             registration = await withTimeout(
-                navigator.serviceWorker.register(new URL('sw.js', SELF_SRC).href),
+                navigator.serviceWorker.register(new URL('sw.js', BASE_URL).href),
                 SW_READY_TIMEOUT,
                 tr('swNotReady')
             );
@@ -1723,46 +1730,64 @@
         }
     }
 
-    async function storageCapabilitySufficient() {
+    function missingOfflineApi() {
         if (!navigator.serviceWorker
             || typeof navigator.serviceWorker.register !== 'function'
             || typeof navigator.serviceWorker.getRegistrations !== 'function') {
-            return false;
+            return 'sw';
         }
         if (!('caches' in window) || !window.caches
             || typeof caches.open !== 'function'
             || typeof caches.match !== 'function'
             || typeof caches.delete !== 'function'
             || typeof caches.keys !== 'function') {
-            return false;
+            return 'caches';
         }
         if (!('indexedDB' in window) || !window.indexedDB
             || typeof indexedDB.open !== 'function'
             || typeof indexedDB.deleteDatabase !== 'function') {
-            return false;
+            return 'idb';
         }
-        if (!navigator.locks || typeof navigator.locks.request !== 'function') return false;
+        if (!navigator.locks || typeof navigator.locks.request !== 'function') return 'locks';
         if (!window.crypto || !window.crypto.subtle
             || typeof window.crypto.subtle.digest !== 'function') {
-            return false;
+            return 'crypto';
         }
-        if (!navigator.storage || typeof navigator.storage.estimate !== 'function') return false;
+        return null;
+    }
+
+    async function readStorageEstimate() {
+        if (!navigator.storage || typeof navigator.storage.estimate !== 'function') return null;
         try {
             const estimate = await navigator.storage.estimate();
             if (!estimate
                 || typeof estimate.quota !== 'number'
                 || typeof estimate.usage !== 'number') {
-                return false;
+                return null;
             }
             if (!isFinite(estimate.quota) || estimate.quota <= 0
                 || !isFinite(estimate.usage) || estimate.usage < 0) {
-                return false;
+                return null;
             }
             const free = estimate.quota - estimate.usage;
-            if (!isFinite(free) || free < 0) return false;
-            return estimate.quota >= MIN_STORAGE_QUOTA && free >= MIN_STORAGE_FREE;
+            if (!isFinite(free) || free < 0) return null;
+            return { quota: estimate.quota, usage: estimate.usage, free: free };
         } catch (e) {
+            return null;
+        }
+    }
+
+    async function hasCompleteCacheState(candidate) {
+        if (!candidate || !candidate.complete
+            || !Array.isArray(candidate.caches) || !candidate.caches.length) {
             return false;
+        }
+        try {
+            // 逐檔驗證 state.files 是否都還在 cache 內；只刪一張圖也算不完整
+            return await checkComplete(candidate);
+        } catch (e) {
+            // cache 查詢本身拋錯時保守視為完整，避免誤刪
+            return true;
         }
     }
 
@@ -1827,13 +1852,9 @@
     }
 
     function reloadOnceFromLegacy() {
-        let controlled = false;
-        try {
-            controlled = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
-        } catch (e) {
-            controlled = false;
-        }
-        if (!controlled || !navigator.onLine) return;
+        // 清理後固定 reload 一次（online 時），讓目前文件不再被舊 SW 控制；
+        // sessionStorage flag 防止低容量裝置無限重載。
+        if (!navigator.onLine) return;
         let flagged = false;
         try {
             if (sessionStorage.getItem(LEGACY_RELOAD_KEY) === '1') return;
@@ -1846,36 +1867,79 @@
     }
 
     async function enterLegacyMode() {
-        hideOfflineSection();
-        try {
-            if (broadcastChannel) broadcastChannel.close();
-        } catch (e) {
-            // ignore
+        // 沒有 Web Locks 時不得做破壞性清理，保留既有 cache/state 並顯示不可用
+        if (!locksSupported) {
+            showOfflineUnavailable(tr('locksUnsupported'));
+            return 'stop';
         }
-        await unregisterSiteWorkers();
-        await deleteLegacyCaches();
-        await deleteLegacyDatabase();
+        let outcome;
+        try {
+            outcome = await withOfflineLock(async function () {
+                // 等待鎖期間可能有其他分頁剛完成下載；鎖內必須重新確認
+                let latest;
+                try {
+                    latest = await loadLatestState();
+                } catch (e) {
+                    return 'state-error';
+                }
+                stateLoadFailed = false;
+                state = latest || defaultState();
+                if (state.manifestVersion) setImageVersion(state.manifestVersion);
+                if (await hasCompleteCacheState(state)) return 'complete';
+
+                // 容量是 legacy 的唯一理由；等待鎖期間容量也可能恢復
+                const freshEstimate = await readStorageEstimate();
+                if (!freshEstimate) return 'unknown';
+                if (freshEstimate.quota >= MIN_STORAGE_QUOTA
+                    && freshEstimate.free >= MIN_STORAGE_FREE) {
+                    return 'capacity-ok';
+                }
+
+                try {
+                    if (broadcastChannel) broadcastChannel.close();
+                } catch (e) {
+                    // ignore
+                }
+                await unregisterSiteWorkers();
+                await deleteLegacyCaches();
+                await deleteLegacyDatabase();
+                return 'cleaned';
+            });
+        } catch (e) {
+            showOfflineUnavailable(tr('legacyCleanupFailed'));
+            return 'stop';
+        }
+
+        if (outcome === 'complete' || outcome === 'capacity-ok') {
+            // 回到正常流程；已完整時顯示 cached，容量已恢復時顯示可下載
+            try {
+                sessionStorage.removeItem(LEGACY_RELOAD_KEY);
+            } catch (e) {
+                // ignore
+            }
+            return 'continue';
+        }
+        if (outcome === 'state-error') {
+            stateLoadFailed = true;
+            initialized = true;
+            showOfflineUnavailable(tr('stateError'));
+            return 'stop';
+        }
+        if (outcome === 'unknown') {
+            initialized = true;
+            showOfflineUnavailable(tr('storageUnknown'));
+            return 'stop';
+        }
+
+        hideOfflineSection();
         setImageVersion('');
         reloadOnceFromLegacy();
+        return 'stop';
     }
 
     async function init() {
         if (!document.getElementById('offlineSection')) return;
-        let capable = false;
-        try {
-            capable = await storageCapabilitySufficient();
-        } catch (e) {
-            capable = false;
-        }
-        if (!capable) {
-            await enterLegacyMode();
-            return;
-        }
-        try {
-            sessionStorage.removeItem(LEGACY_RELOAD_KEY);
-        } catch (e) {
-            // sessionStorage 不可用不影響正常模式
-        }
+
         const initialBtn = offlineButtonEl();
         const initialStatus = offlineStatusEl();
         if (initialBtn) {
@@ -1884,20 +1948,43 @@
         }
         if (initialStatus) initialStatus.textContent = tr('reading');
 
-        ensureOverlay();
-        bindUI();
-
-        if (!locksSupported) {
-            try {
-                await ensureServiceWorker();
-            } catch (e) {
-                // 既有 cache 仍可能由已註冊的 SW 提供；這裡只負責顯示能力不足
-            }
+        const missingApi = missingOfflineApi();
+        if (missingApi) {
+            // API 不完整時只停用離線功能；絕不 unregister SW 或刪除既有 cache/IDB
             initialized = true;
-            showLocksUnsupported();
+            let message = tr('apiUnsupported');
+            if (missingApi === 'sw') message = tr('swUnsupported');
+            else if (missingApi === 'locks') message = tr('locksUnsupported');
+            showOfflineUnavailable(message);
             return;
         }
 
+        let wasLegacyReload = false;
+        try {
+            wasLegacyReload = sessionStorage.getItem(LEGACY_RELOAD_KEY) === '1';
+        } catch (e) {
+            wasLegacyReload = false;
+        }
+        let earlyEstimate = null;
+        if (wasLegacyReload) {
+            // legacy reload 後先看容量，避免再次開啟/重建剛刪掉的 IDB，也避免 reload 迴圈
+            earlyEstimate = await readStorageEstimate();
+            if (!earlyEstimate
+                || earlyEstimate.quota < MIN_STORAGE_QUOTA
+                || earlyEstimate.free < MIN_STORAGE_FREE) {
+                hideOfflineSection();
+                initialized = true;
+                return;
+            }
+            try {
+                sessionStorage.removeItem(LEGACY_RELOAD_KEY);
+            } catch (e) {
+                // ignore
+            }
+            wasLegacyReload = false;
+        }
+
+        // 容量判斷前先讀 state：已完成的 cache 不可因 free 偏低而被 legacy 清掉
         try {
             state = await loadLatestState();
         } catch (e) {
@@ -1908,6 +1995,33 @@
         }
         if (!state) state = defaultState();
         if (state.manifestVersion) setImageVersion(state.manifestVersion);
+
+        const completeCache = await hasCompleteCacheState(state);
+        const estimate = earlyEstimate || await readStorageEstimate();
+        if (!estimate) {
+            // 無法確認容量時保留 cache/state，只停用離線下載介面
+            initialized = true;
+            showOfflineUnavailable(tr('storageUnknown'));
+            return;
+        }
+        if (!completeCache && (estimate.quota < MIN_STORAGE_QUOTA
+            || estimate.free < MIN_STORAGE_FREE)) {
+            if (wasLegacyReload) {
+                hideOfflineSection();
+                initialized = true;
+                return;
+            }
+            if (await enterLegacyMode() !== 'continue') return;
+        }
+
+        try {
+            sessionStorage.removeItem(LEGACY_RELOAD_KEY);
+        } catch (e) {
+            // sessionStorage 不可用不影響正常模式
+        }
+
+        ensureOverlay();
+        bindUI();
 
         if (broadcastChannel) {
             broadcastChannel.addEventListener('message', function (event) {
