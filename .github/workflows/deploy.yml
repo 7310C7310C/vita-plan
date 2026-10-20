@@ -12,7 +12,10 @@ jobs:
     steps:
       - name: ⬇️ Checkout Repository
         uses: actions/checkout@v4
-        
+
+      - name: ✅ Check offline manifest
+        run: python3 scripts/generate_offline_manifest.py --check
+
       # -----------------------------------------------------------------
       # 核心步骤：通过 SSH 连接服务器并执行 Git Pull
       # -----------------------------------------------------------------

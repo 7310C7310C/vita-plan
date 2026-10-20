@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>复活计划乐队</title>
     <link rel="icon" href="favicon.ico" type="image/x-icon">
-    <link rel="stylesheet" href="style.css?v=20261019151459">
+    <link rel="stylesheet" href="style.css?v=20261020160000">
     <style>
         #loadingOverlay {
             display: block;
@@ -60,6 +60,14 @@
             </select>
         </div>
         
+        <div class="offline-card" id="offlineSection">
+            <div class="offline-card-info">
+                <span class="offline-card-title" id="offlineTitle">离线歌谱</span>
+                <span class="offline-card-status" id="offlineStatus" aria-live="polite">正在读取离线状态……</span>
+            </div>
+            <button class="offline-card-btn" id="offlineActionBtn" type="button" disabled>正在读取离线状态……</button>
+        </div>
+
         <button class="category-card" id="weeklyButton">
             <h2 style="margin: 0;">本周歌曲</h2>
             <div class="update-date" id="weeklyButtonDate"></div>
@@ -229,6 +237,7 @@
         <div id="modalVersionBtnList" style="display:flex;flex-direction:column;gap:14px;margin-bottom:10px;"></div>
       </div>
     </div>
-    <script src="script.js?v=20261019151459"></script>
+    <script src="script.js?v=20261020160000"></script>
+    <script src="offline.js?v=20261020160000"></script>
 </body>
 </html>

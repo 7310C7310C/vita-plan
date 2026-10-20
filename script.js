@@ -2,6 +2,13 @@
 const jsonVersion = '20261019151459';
 let songsData = {};
 
+// 離線更新後讓瀏覽器 HTTP/memory cache 失效；SW 的 cache key 會忽略 query。
+function versionedImageUrl(path) {
+    const version = window.VP_IMAGE_VERSION;
+    if (!version) return path;
+    return path + (path.indexOf('?') === -1 ? '?' : '&') + 'v=' + encodeURIComponent(version);
+}
+
 // 加载数据的函数
 function loadSongsData() {
     fetch(`songs.json?v=${jsonVersion}`)
@@ -686,6 +693,9 @@ function toggleLanguage() {
     
     // 重新渲染分类列表以更新"首歌曲"/"songs"显示
     renderCategories();
+
+    // 通知离线歌谱区更新文字
+    document.dispatchEvent(new CustomEvent('languagechange'));
 }
 
 // 获取翻译
@@ -1273,23 +1283,23 @@ function loadImage(page) {
         // 可以在这里添加错误处理，比如显示一个错误消息
     };
     
-    sheetImage.src = imagePath;
+    sheetImage.src = versionedImageUrl(imagePath);
     
     // 预加载相邻页面（保持原有逻辑）
     if (page < currentState.totalPages) {
         const nextImage = new Image();
         if (currentState.currentVersion === '原谱') {
-            nextImage.src = `img/${currentState.currentCategory}/${base}_${page + 1}.jpeg`;
+            nextImage.src = versionedImageUrl(`img/${currentState.currentCategory}/${base}_${page + 1}.jpeg`);
         } else {
-            nextImage.src = `img/${currentState.currentCategory}/${base}_${currentState.currentVersion}_${page + 1}.jpeg`;
+            nextImage.src = versionedImageUrl(`img/${currentState.currentCategory}/${base}_${currentState.currentVersion}_${page + 1}.jpeg`);
         }
     }
     if (page > 1) {
         const prevImage = new Image();
         if (currentState.currentVersion === '原谱') {
-            prevImage.src = `img/${currentState.currentCategory}/${base}_${page - 1}.jpeg`;
+            prevImage.src = versionedImageUrl(`img/${currentState.currentCategory}/${base}_${page - 1}.jpeg`);
         } else {
-            prevImage.src = `img/${currentState.currentCategory}/${base}_${currentState.currentVersion}_${page - 1}.jpeg`;
+            prevImage.src = versionedImageUrl(`img/${currentState.currentCategory}/${base}_${currentState.currentVersion}_${page - 1}.jpeg`);
         }
     }
 }
@@ -2314,7 +2324,7 @@ function preloadWeeklySongs() {
                 }
             };
             
-            img.src = imagePath;
+            img.src = versionedImageUrl(imagePath);
         }
     });
 }
