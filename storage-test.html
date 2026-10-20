@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>离线缓存容量检测</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #f5f1e8;
+            color: #5a4a3a;
+            font-family: 'Noto Sans', 'Roboto', 'Arial', sans-serif;
+            line-height: 1.6;
+        }
+        .wrap { max-width: 640px; margin: 0 auto; }
+        h1 { font-size: 1.4rem; color: #6b4f3b; margin: 0 0 8px; }
+        .lead { margin: 0 0 16px; font-size: 0.95rem; }
+        .warn {
+            background: #fff3cd;
+            border: 1px solid #e0c98a;
+            color: #6b4f3b;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 0.9rem;
+            margin-bottom: 16px;
+        }
+        .card {
+            background: #fffbe9;
+            border: 1px solid #d4c8b8;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 14px;
+        }
+        button {
+            min-height: 44px;
+            padding: 10px 18px;
+            border: 0;
+            border-radius: 22px;
+            background: #8c6a4d;
+            color: #fff;
+            font: inherit;
+            cursor: pointer;
+        }
+        button:hover { background: #a07a5a; }
+        button:disabled { opacity: 0.6; cursor: default; }
+        .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+        .progress {
+            height: 10px;
+            background: #e6dccf;
+            border-radius: 6px;
+            overflow: hidden;
+            margin: 12px 0 6px;
+        }
+        .bar { height: 100%; width: 0; background: #8c6a4d; transition: width 0.2s; }
+        .status { font-size: 0.9rem; color: #8c6a4d; min-height: 1.4em; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        td { border-bottom: 1px solid #e6dccf; padding: 7px 4px; vertical-align: top; }
+        td:first-child { width: 42%; color: #6b4f3b; }
+        .conclusion { font-weight: 700; color: #6b4f3b; margin-top: 10px; }
+        pre {
+            white-space: pre-wrap;
+            word-break: break-all;
+            background: #f1e9dd;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 0.8rem;
+            max-height: 260px;
+            overflow: auto;
+        }
+        .muted { color: #8c6a4d; font-size: 0.8rem; }
+        @media (max-width: 420px) {
+            body { padding: 14px; }
+            button { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>离线缓存容量检测</h1>
+    <p class="lead">在荣耀浏览器打开本页，按「开始检测」。页面会临时写入数据，完成后自动清除，并显示此浏览器实际能缓存多少乐谱。</p>
+    <div class="warn">
+        检测会占用缓存空间，可能触发浏览器清理本站已有的离线缓存。若之前已经缓存过乐谱，检测后可能需要重新缓存。检测最多写入约 48MB。
+    </div>
+
+    <div class="card">
+        <div class="row">
+            <button id="startBtn">开始检测</button>
+            <button id="copyBtn" disabled>复制结果</button>
+        </div>
+        <div class="progress"><div class="bar" id="bar"></div></div>
+        <div class="status" id="status">尚未开始</div>
+        <div class="conclusion" id="conclusion"></div>
+    </div>
+
+    <div class="card">
+        <table>
+            <tr><td>浏览器</td><td id="ua">-</td></tr>
+            <tr><td>当前网址</td><td id="origin">-</td></tr>
+            <tr><td>Service Worker</td><td id="sw">-</td></tr>
+            <tr><td>Cache Storage</td><td id="caches">-</td></tr>
+            <tr><td>IndexedDB</td><td id="idb">-</td></tr>
+            <tr><td>Web Locks</td><td id="locks">-</td></tr>
+            <tr><td>完整性校验 (crypto.subtle)</td><td id="crypto">-</td></tr>
+            <tr><td>浏览器回報的可用空間</td><td id="estimate">-</td></tr>
+            <tr><td>实际可写入 Cache Storage</td><td id="capacity">-</td></tr>
+            <tr><td>检测耗时</td><td id="elapsed">-</td></tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <div class="muted">检测结果（可复制给管理员）</div>
+        <pre id="report">尚未开始</pre>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+    const CHUNK = 1024 * 1024;
+    const MAX_BYTES = 48 * CHUNK;
+    const TEST_CACHE = 'storage-capacity-test-' + Date.now();
+    let reportText = '';
+    let running = false;
+
+    const $ = function (id) { return document.getElementById(id); };
+
+    function fmtBytes(bytes) {
+        if (typeof bytes !== 'number' || !isFinite(bytes) || bytes < 0) return '-';
+        if (bytes >= 1024 * 1024 * 1024) return (bytes / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+        if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+        return Math.round(bytes / 1024) + ' KB';
+    }
+
+    function setStatus(text) { $('status').textContent = text; }
+
+    function setProgress(bytes) {
+        const pct = Math.min(100, (bytes / MAX_BYTES) * 100);
+        $('bar').style.width = pct + '%';
+    }
+
+    async function estimate() {
+        if (!navigator.storage || typeof navigator.storage.estimate !== 'function') {
+            return null;
+        }
+        try { return await navigator.storage.estimate(); }
+        catch (e) { return null; }
+    }
+
+    function describeEstimate(est) {
+        if (!est) return '无法取得';
+        return 'quota ' + fmtBytes(est.quota) + ' / usage ' + fmtBytes(est.usage);
+    }
+
+    function makeChunk(index) {
+        const data = new Uint8Array(CHUNK);
+        try {
+            crypto.getRandomValues(data.subarray(0, 65536));
+        } catch (e) {
+            // ignore
+        }
+        data[0] = index & 255;
+        data[1] = (index >> 8) & 255;
+        return data;
+    }
+
+    async function run() {
+        if (running) return;
+        running = true;
+        $('startBtn').disabled = true;
+        $('copyBtn').disabled = true;
+        $('conclusion').textContent = '';
+        setProgress(0);
+        setStatus('准备中……');
+
+        const started = performance.now();
+        const lines = [];
+        const ua = navigator.userAgent || '-';
+        $('ua').textContent = ua;
+        $('origin').textContent = location.origin;
+        lines.push('浏览器: ' + ua);
+        lines.push('网址: ' + location.origin);
+
+        const hasSW = 'serviceWorker' in navigator;
+        const hasCaches = 'caches' in window;
+        const hasIDB = 'indexedDB' in window;
+        const hasLocks = !!(navigator.locks && typeof navigator.locks.request === 'function');
+        const hasCrypto = !!(window.crypto && crypto.subtle);
+        $('sw').textContent = hasSW ? '支持' : '不支持';
+        $('caches').textContent = hasCaches ? '支持' : '不支持';
+        $('idb').textContent = hasIDB ? '支持' : '不支持';
+        $('locks').textContent = hasLocks ? '支持' : '不支持';
+        $('crypto').textContent = hasCrypto ? '支持' : '不支持';
+        lines.push('Service Worker: ' + (hasSW ? '支持' : '不支持'));
+        lines.push('Cache Storage: ' + (hasCaches ? '支持' : '不支持'));
+        lines.push('IndexedDB: ' + (hasIDB ? '支持' : '不支持'));
+        lines.push('Web Locks: ' + (hasLocks ? '支持' : '不支持'));
+        lines.push('crypto.subtle: ' + (hasCrypto ? '支持' : '不支持'));
+
+        const before = await estimate();
+        $('estimate').textContent = describeEstimate(before);
+        lines.push('浏览器回報: ' + describeEstimate(before));
+
+        if (!hasCaches) {
+            setStatus('此浏览器不支持 Cache Storage');
+            $('capacity').textContent = '-';
+            $('conclusion').textContent = '无法使用离线缓存，请换浏览器。';
+            finish(lines, started);
+            return;
+        }
+
+        let written = 0;
+        let stoppedAtLimit = false;
+        let errorText = '';
+        let cache = null;
+        try {
+            cache = await caches.open(TEST_CACHE);
+            while (written < MAX_BYTES) {
+                if (written > 0 && written % (4 * CHUNK) === 0) {
+                    await new Promise(function (r) { setTimeout(r, 0); });
+                }
+                const index = written / CHUNK;
+                const body = new Blob([makeChunk(index)]);
+                const key = new Request(new URL('__storage_capacity_test__/chunk-' + index, location.href).href);
+                try {
+                    await cache.put(key, new Response(body));
+                } catch (error) {
+                    errorText = (error && (error.name + ': ' + error.message)) || String(error);
+                    stoppedAtLimit = true;
+                    break;
+                }
+                written += CHUNK;
+                setProgress(written);
+                setStatus('已写入 ' + fmtBytes(written) + '……');
+            }
+            if (!stoppedAtLimit && written >= MAX_BYTES) {
+                errorText = '达到检测上限 ' + fmtBytes(MAX_BYTES) + '，未遇到配额错误';
+            }
+        } catch (error) {
+            errorText = (error && (error.name + ': ' + error.message)) || String(error);
+        } finally {
+            if (cache) {
+                try { await caches.delete(TEST_CACHE); } catch (e) {}
+            }
+        }
+
+        let testCacheLeft = false;
+        try { testCacheLeft = await caches.has(TEST_CACHE); } catch (e) { testCacheLeft = false; }
+        if (testCacheLeft) {
+            try { await caches.delete(TEST_CACHE); } catch (e) {}
+        }
+        const after = await estimate();
+        $('capacity').textContent = fmtBytes(written);
+        $('estimate').textContent = describeEstimate(before) + ' → ' + describeEstimate(after);
+        lines.push('实际可写入: ' + fmtBytes(written));
+        if (errorText) lines.push('停止原因: ' + errorText);
+        lines.push('检测后回報: ' + describeEstimate(after));
+        if (testCacheLeft) lines.push('注意: 测试缓存一度未清除，已再次尝试删除。');
+        lines.push('注: 浏览器对存储用量的统计可能有延迟。');
+
+        let conclusion;
+        if (written >= 36 * CHUNK) {
+            conclusion = '可缓存全部约 36MB 乐谱。';
+        } else if (written >= 21 * CHUNK) {
+            conclusion = '无法缓存原始全量 36MB；约可容纳 1000px WebP 全量（约 21MB）。';
+        } else if (written >= 18 * CHUNK) {
+            conclusion = '无法缓存原始全量 36MB；约可容纳 800px WebP 全量（约 18MB）。';
+        } else if (written >= 3 * CHUNK) {
+            conclusion = '容量有限，建议只缓存本周歌曲（约 2MB）或换浏览器。';
+        } else {
+            conclusion = '可写容量非常小，建议换浏览器或清理手机空间。';
+        }
+        $('conclusion').textContent = conclusion;
+        lines.push('结论: ' + conclusion);
+        finish(lines, started, written, errorText);
+    }
+
+    function finish(lines, started, written, errorText) {
+        const elapsed = ((performance.now() - started) / 1000).toFixed(1);
+        $('elapsed').textContent = elapsed + ' 秒';
+        lines.push('耗时: ' + elapsed + ' 秒');
+        if (typeof written === 'number') lines.push('可写入字节: ' + written);
+        if (errorText) lines.push('错误: ' + errorText);
+        reportText = lines.join('\n');
+        $('report').textContent = reportText;
+        $('startBtn').disabled = false;
+        $('copyBtn').disabled = false;
+        running = false;
+        setStatus('检测完成，测试数据已清除。');
+    }
+
+    $('startBtn').addEventListener('click', run);
+    $('copyBtn').addEventListener('click', function () {
+        if (!reportText) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(reportText).then(function () {
+                setStatus('结果已复制到剪贴板。');
+            }).catch(function () {
+                setStatus('复制失败，请长按下方文字复制。');
+            });
+        } else {
+            setStatus('请长按下方文字复制。');
+        }
+    });
+
+    // 预先显示能力，不写入数据
+    $('sw').textContent = ('serviceWorker' in navigator) ? '支持' : '不支持';
+    $('caches').textContent = ('caches' in window) ? '支持' : '不支持';
+    $('idb').textContent = ('indexedDB' in window) ? '支持' : '不支持';
+    $('locks').textContent = (navigator.locks && typeof navigator.locks.request === 'function') ? '支持' : '不支持';
+    $('crypto').textContent = (window.crypto && crypto.subtle) ? '支持' : '不支持';
+    $('ua').textContent = navigator.userAgent || '-';
+    $('origin').textContent = location.origin;
+})();
+</script>
+</body>
+</html>
