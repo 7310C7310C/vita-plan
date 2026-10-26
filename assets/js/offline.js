@@ -56,13 +56,16 @@
 
     const I18N = {
         zh: {
-            notDownloaded: '未下载',
-            incomplete: '缓存不完整',
+            notDownloaded: '未缓存',
+            incomplete: '离线缓存未完成（不影响在线使用）',
             working: '处理中……',
             downloadAll: '缓存全部（约 36MB）',
-            continue: '继续下载',
+            continue: '继续缓存',
             checkUpdate: '检查更新',
             cachedStatus: '缓存于 {date}',
+            cachingBackground: '正在后台缓存，可继续浏览',
+            cachingProgress: '缓存中 {percent}%',
+            cachingStorageError: '存储空间不足，无法缓存离线副本（在线使用不受影响）',
             reading: '正在读取离线状态……',
             unavailableButton: '离线缓存不可用',
             swUnsupported: '此浏览器不支持离线缓存。',
@@ -79,9 +82,9 @@
             otherTabUpdated: '另一分页已更新离线缓存，请重新检查更新。',
             contentMismatch: '文件内容与离线清单不一致，已停止操作。',
             integrityUnsupported: '此浏览器不支持完整性校验。',
-            incompleteManifest: '缓存不完整，请重试。',
-            downloadTitle: '正在下载乐谱',
-            downloadMsg: '首次缓存全部乐谱，完成后可离线打开。请保持页面打开。',
+            incompleteManifest: '离线缓存未完成，请重试。',
+            downloadTitle: '正在缓存乐谱',
+            downloadMsg: '首次缓存全部乐谱，完成后可离线打开；下载会在后台进行，可继续浏览。',
             checkTitle: '正在检查更新',
             checkMsg: '正在比对页面与乐谱文件，请稍候。',
             updateTitle: '正在更新乐谱',
@@ -112,13 +115,16 @@
             timeout: '请求超时（{seconds} 秒），请检查网络后重试。'
         },
         en: {
-            notDownloaded: 'Not downloaded',
-            incomplete: 'Cache incomplete',
+            notDownloaded: 'Not cached',
+            incomplete: 'Offline cache not finished (online use is unaffected)',
             working: 'Working...',
             downloadAll: 'Cache all (about 36MB)',
-            continue: 'Continue download',
+            continue: 'Continue caching',
             checkUpdate: 'Check for updates',
             cachedStatus: 'Cached {date}',
+            cachingBackground: 'Caching in the background; you can keep browsing',
+            cachingProgress: 'Caching {percent}%',
+            cachingStorageError: 'Not enough storage for the offline copy (online use is unaffected)',
             reading: 'Reading offline status...',
             unavailableButton: 'Offline cache unavailable',
             swUnsupported: 'This browser does not support offline caching.',
@@ -135,9 +141,9 @@
             otherTabUpdated: 'Another tab updated the offline cache. Please check for updates again.',
             contentMismatch: 'A downloaded file did not match the offline manifest. The operation was stopped.',
             integrityUnsupported: 'This browser does not support integrity verification.',
-            incompleteManifest: 'The cache is incomplete. Please retry.',
-            downloadTitle: 'Downloading sheet music',
-            downloadMsg: 'Cache all sheet music once, then open them offline. Keep this page open.',
+            incompleteManifest: 'The offline cache was not finished. Please retry.',
+            downloadTitle: 'Caching sheet music',
+            downloadMsg: 'Cache all sheet music once, then open them offline. Caching runs in the background, so you can keep browsing.',
             checkTitle: 'Checking for updates',
             checkMsg: 'Comparing local files with the server. Please wait.',
             updateTitle: 'Updating sheet music',
@@ -171,6 +177,9 @@
 
     let state = null;
     let busy = false;
+    let downloading = false;
+    let downloadProgress = 0;
+    let backgroundError = '';
     let applying = false;
     let lastAction = 'download';
     let unloadHandler = null;
@@ -950,6 +959,13 @@
             btn.disabled = true;
             return;
         }
+        if (downloading) {
+            status.textContent = tr('cachingBackground');
+            btn.textContent = tr('cachingProgress', { percent: downloadProgress });
+            btn.disabled = true;
+            btn.dataset.action = '';
+            return;
+        }
 
         if (swFailure) {
             showOfflineUnavailable(swFailure);
@@ -971,7 +987,7 @@
             }
             const hadCache = wasComplete
                 || !!(state && (state.updatedAt || Object.keys(state.files || {}).length));
-            status.textContent = (hadCache || hasStaging) ? tr('incomplete') : tr('notDownloaded');
+            status.textContent = backgroundError || ((hadCache || hasStaging) ? tr('incomplete') : tr('notDownloaded'));
             btn.textContent = hasStaging ? tr('continue') : tr('downloadAll');
             btn.dataset.action = hasStaging ? 'resume' : 'download';
             btn.disabled = false;
@@ -1239,6 +1255,18 @@
         if (count) count.textContent = '';
     }
 
+    function updateDownloadProgress(done, total) {
+        downloadProgress = total ? Math.min(100, Math.round((done / total) * 100)) : 0;
+        const btn = offlineButtonEl();
+        if (btn) {
+            btn.textContent = tr('cachingProgress', { percent: downloadProgress });
+            btn.disabled = true;
+            btn.dataset.action = '';
+        }
+        const status = offlineStatusEl();
+        if (status) status.textContent = tr('cachingBackground');
+    }
+
     function errorMessage(error) {
         if (error && (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
             return tr('storageError');
@@ -1281,21 +1309,23 @@
     /* ---------- 首次全量下載 ---------- */
 
     async function startDownload() {
-        if (busy || checking) return;
+        if (busy || checking || downloading) return;
         if (!locksSupported) {
             showError(new Error(tr('locksUnsupported')));
             return;
         }
         lastAction = 'download';
-
-        setBusy(true);
-        showOverlay(tr('downloadTitle'), tr('downloadMsg'), { progress: true });
+        downloading = true;
+        downloadProgress = 0;
+        backgroundError = '';
+        refreshUI();
 
         try {
             await ensureServiceWorker();
         } catch (error) {
-            showError(error);
-            refreshUI();
+            downloading = false;
+            swFailure = error.message || tr('swUnsupported');
+            showOfflineUnavailable(swFailure);
             return;
         }
 
@@ -1359,8 +1389,7 @@
                     }, 0);
                     if (needed > 0) await preflightStorage(needed);
 
-                    let bytes = 0;
-                    updateProgress(done, entries.length, 0);
+                    updateDownloadProgress(done, entries.length);
                     const errors = await runPool(pending, 5, async function (file) {
                         const res = await fetchWithTimeout(withBust(file.url), {
                             cache: 'no-store',
@@ -1369,9 +1398,8 @@
                         if (!res.ok) throw new Error(tr('requestFailed', { status: res.status }));
                         await verifyDownloaded(res, file);
                         await cache.put(cacheRequest(file.key), res);
-                        bytes += file.size;
                         done++;
-                        updateProgress(done, entries.length, bytes);
+                        updateDownloadProgress(done, entries.length);
                     });
                     if (errors.length) {
                         throwPoolError(errors, 'downloadTimeout', 'downloadFailed');
@@ -1434,25 +1462,23 @@
                 }
             });
         } catch (error) {
-            showError(error);
+            downloading = false;
+            backgroundError = isQuotaError(error) ? tr('cachingStorageError') : tr('incomplete');
             refreshUI();
             return;
         }
 
+        downloading = false;
         if (result === 'complete') {
-            setBusy(false);
-            hideOverlay();
             await refreshUI();
-            checkForUpdates();
             return;
         }
 
+        backgroundError = '';
         requestPersistentStorage();
-        showDone(false);
         refreshUI();
         maybeCompactCaches();
     }
-
 
     /* ---------- 手動檢查更新 ---------- */
 
@@ -1491,7 +1517,7 @@
 
     async function checkForUpdates(options) {
         const silent = !!(options && options.silent);
-        if (busy || checking) return;
+        if (busy || checking || downloading) return;
         if (!locksSupported) {
             if (!silent) showError(new Error(tr('locksUnsupported')));
             return;
@@ -1587,7 +1613,7 @@
     }
 
     async function applyUpdate(confirmedManifest, checkedRevision) {
-        if (applying) return;
+        if (applying || downloading) return;
         applying = true;
         let success = false;
         setBusy(true);

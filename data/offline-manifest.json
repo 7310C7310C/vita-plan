@@ -1,13 +1,13 @@
 {
-  "version": "b78bf5e37b937e1f",
+  "version": "a457730496d1d668",
   "files": {
     "assets/css/style.css": {
       "hash": "a66a790f977a2a13407dfaf87a838462201b0d1a",
       "size": 39108
     },
     "assets/js/offline.js": {
-      "hash": "bc8dde23d7e5b7c3bffe81f0f888bbadaa27734b",
-      "size": 82661
+      "hash": "6e5ad52c9cd719a2ef7c2b4c0636b4c57042d0ea",
+      "size": 84236
     },
     "assets/js/script.js": {
       "hash": "7f624f8577d63febaacca1a462b9f6271f599d89",
@@ -1562,7 +1562,7 @@
       "size": 85569
     },
     "index.html": {
-      "hash": "12bc1074bdff7f0e10c7ccbc1699a68a4080872b",
+      "hash": "48dd24161182e419673219d05d6385f990f848ad",
       "size": 12461
     }
   }
