@@ -969,11 +969,11 @@
     }
   },
   "weeklySongs": {
-    "updateDate": "2026/11/01",
+    "updateDate": "2026/11/02",
     "songs": [
       {
         "category": "进堂咏",
-        "id": "015"
+        "id": "019"
       },
       {
         "category": "垂怜曲",
@@ -1001,7 +1001,7 @@
       },
       {
         "category": "礼成咏",
-        "id": "007"
+        "id": "017"
       }
     ]
   }
