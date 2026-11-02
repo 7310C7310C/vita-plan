@@ -1,5 +1,5 @@
 {
-  "version": "3aa4e1fcadd2c182",
+  "version": "fa36cf0387238b05",
   "files": {
     "assets/css/style.css": {
       "hash": "a66a790f977a2a13407dfaf87a838462201b0d1a",
@@ -10,12 +10,12 @@
       "size": 84236
     },
     "assets/js/script.js": {
-      "hash": "037d04c596786d484f6b194dc259c34aba8ed9b0",
+      "hash": "d1c8b9a915a213ed1d42598ace5f05a93d7f3811",
       "size": 109328
     },
     "data/songs.json": {
-      "hash": "9b32d7081a7f91151b8ac15c122ea042923a8ec8",
-      "size": 22289
+      "hash": "25b6035ceb969ede88efd8bb039d0e1392a68b13",
+      "size": 22219
     },
     "favicon.ico": {
       "hash": "1c9417921c58f9e94237e9851e9b466f6f79c1fb",
@@ -1562,7 +1562,7 @@
       "size": 85569
     },
     "index.html": {
-      "hash": "5da894dce5a4cb030b23cd628d971ea409536d8d",
+      "hash": "a3764fc96ec3294833f1d985cf2bea02993c95c6",
       "size": 12461
     }
   }
